@@ -31,9 +31,30 @@ class Solution:
         Returns:
             Homography from source to destination, 3x3 numpy array.
         """
+        # Create vectors of [x,y,1]
+        N_size = match_p_dst.shape[1]  # Get the N dimention of matching points. meaning-number of matching points.
+        ones_vector = np.ones((N_size, 1)).T
+        match_p_src_vert = np.vstack((match_p_src, ones_vector))
+        match_p_dst_vert = np.vstack((match_p_dst, ones_vector))
+        zero_row_vector = np.zeros(3)
+
+        # init a new matrix to obtain all matching point arranged with destination points.
+        ref_mat = np.zeros((2 * N_size, 9))
+
+        for i in range(0, N_size):
+
+            # compute in each 2 rows the equation for x and for y
+            x_row = np.hstack((match_p_src_vert[:, i].T, zero_row_vector,  -match_p_src_vert[:, i] * match_p_dst_vert[0][i].T))
+            y_row = np.hstack((zero_row_vector, match_p_src_vert[:, i].T, -match_p_src_vert[:, i] * match_p_dst_vert[1][i].T))
+
+            ref_mat[2 * i, :] = x_row
+            ref_mat[2 * i + 1:, :] = y_row
+
+        U, S, V = np.linalg.svd(ref_mat)
+        # take the vector with the smallest singular values (descending order)
+        H = np.reshape(V[-1], (3, 3))
         # return homography
-        """INSERT YOUR CODE HERE"""
-        pass
+        return H
 
     @staticmethod
     def compute_forward_homography_slow(
@@ -58,9 +79,19 @@ class Solution:
         Returns:
             The forward homography of the source image to its destination.
         """
-        # return new_image
-        """INSERT YOUR CODE HERE"""
-        pass
+
+        dst_image = np.zeros(dst_image_shape,  dtype=int)
+        for row in range(src_image.shape[0]):
+            for col in range(src_image.shape[1]):
+                point = np.array([[row], [col], [1]], dtype=int)
+                transformed_point = np.dot(homography, point)
+                normalized_point = (int(transformed_point[0][0] / transformed_point[2][0]), int(transformed_point[1][0] / transformed_point[2][0]))
+                # Check if point is in dest image
+                if (normalized_point[0] in range(dst_image_shape[1])) and (normalized_point[1] in range(dst_image_shape[0])):
+                    for channel in range(dst_image_shape[2]):
+                        dst_image[normalized_point[0]][normalized_point[1]][channel] = src_image[row][col][channel]
+
+        return dst_image
 
     @staticmethod
     def compute_forward_homography_fast(
@@ -89,9 +120,86 @@ class Solution:
         Returns:
             The forward homography of the source image to its destination.
         """
-        # return new_image
-        """INSERT YOUR CODE HERE"""
-        pass
+        dst_image = np.zeros(dst_image_shape, dtype=int)
+        # Setting meshgrid with indeices instead of meshgrid since meshgrid returns to arrays
+        meshgrid_image = np.indices((src_image.shape[0], src_image.shape[1]))
+        meshgrid_image = meshgrid_image.reshape(2, -1)
+        meshgrid_image = np.vstack((meshgrid_image, np.ones(meshgrid_image.shape[1]))).astype(np.int)
+
+        transformed_vectors = np.dot(homography, meshgrid_image)
+        normalized_x = np.divide(np.array(transformed_vectors[0, :]), np.array(transformed_vectors[2, :])).astype(np.int)
+        normalized_y = np.divide(np.array(transformed_vectors[1, :]), np.array(transformed_vectors[2, :])).astype(np.int)
+        selected_points = np.where((normalized_x >= 0) & (normalized_x < dst_image_shape[1]) & (normalized_y >= 0) & (
+                     normalized_y < dst_image_shape[0]))
+        print(selected_points)
+        x_cords = normalized_x[selected_points] # taking x,y coordinates
+        y_cords = normalized_y[selected_points]
+
+        # update meshgrid to contain only selected points
+        meshgrid_image_x = meshgrid_image[0][selected_points]
+        meshgrid_image_y = meshgrid_image[1][selected_points]
+
+        dst_image[y_cords][x_cords] = src_image[meshgrid_image_y][meshgrid_image_x]
+        return dst_image
+
+
+        # # getting images shapes and init a matrix to store all the pixel locations.
+        # dst_image_height = dst_image_shape[0];
+        # dst_image_width = dst_image_shape[1];
+        # dst_image_channles = dst_image_shape[2]
+        # src_image_height = src_image.shape[0];
+        # src_image_width = src_image.shape[1];
+        # src_image_channles = src_image.shape[2]
+        # dest_image = np.zeros((dst_image_height, dst_image_width, dst_image_channles), dtype=int)
+        # meshgrid_src_cor = np.indices(
+        #     (src_image_width, src_image_height))  # function meshgrid is not good enough as creates two arrays
+        # # meshgrid_src_cor =
+        # # [[[   0    0    0 ...    0    0    0]
+        # #                   ...
+        # #   [1367 1367 1367 ... 1367 1367 1367]]
+        #
+        # #  [[   0    1    2 ... 1023 1024 1025]
+        # #                   ...
+        # #   [   0    1    2 ... 1023 1024 1025]]]
+        #
+        # meshgrid_src_cor = meshgrid_src_cor.reshape(2, -1)  # all the pixels as 2X(hight*width) matrix
+        # # meshgrid_src_cor =
+        # # [[   0    0    0 ... 1367 1367 1367]
+        # # [   0    1    2 ... 1023 1024 1025]]
+        #
+        # old_x = meshgrid_src_cor[0, :]
+        # old_y = meshgrid_src_cor[1, :]
+        #
+        # meshgrid_src_cor = np.vstack((meshgrid_src_cor, np.ones(meshgrid_src_cor.shape[1]))).astype(
+        #     np.int)  # add 1 to make it homogeneous
+        # # meshgrid_src_cor =
+        # # [[   0    0    0 ... 1367 1367 1367]
+        # # [   0    1    2 ... 1023 1024 1025]
+        # # [   1    1    1 ...    1    1    1]]
+        #
+        # new_cor = np.dot(homography,
+        #                  meshgrid_src_cor)  # (3) Transform the source homogeneous coordinates to the target homogeneous coordinates with a simple matrix multiplication
+        #
+        # x_cor_norm = np.divide(np.array(new_cor[0, :]), np.array(new_cor[2, :])).astype(
+        #     np.int)  # (3) apply the normalization you've seen in class (4) Convert the coordinates into integer values
+        # y_cor_norm = np.divide(np.array(new_cor[1, :]), np.array(new_cor[2, :])).astype(
+        #     np.int)  # (3) apply the normalization you've seen in class (4) Convert the coordinates into integer values
+        #
+        # cliped_points = np.where((x_cor_norm >= 0) & (x_cor_norm < dst_image_width) & (y_cor_norm >= 0) & (
+        #             y_cor_norm < dst_image_height))  # (4) clip them according to the destination image size
+        # # print (cliped_points)
+        # x_cor_norm = x_cor_norm[cliped_points]  # (4) clip them according to the destination image size
+        # y_cor_norm = y_cor_norm[cliped_points]
+        # old_x = old_x[cliped_points]
+        # old_y = old_y[cliped_points]
+        #
+        # dest_image[y_cor_norm, x_cor_norm] = src_image[
+        #     old_y, old_x]  # (5) Plant the pixels from the source image to the target image according to the coordinates you found.
+        #
+        # return dest_image
+
+    #return new_image
+
 
     @staticmethod
     def test_homography(homography: np.ndarray,
