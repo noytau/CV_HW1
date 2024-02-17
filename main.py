@@ -78,7 +78,7 @@ def main():
     plt.figure()
     forward_panorama_fast_plot = plt.imshow(transformed_image_fast)
     plt.title('Forward Homography Fast implementation')
-    plt.show()
+    # plt.show()
 
     # loading data with imperfect matches
     src_img, dst_img, match_p_src, match_p_dst = load_data(False)
@@ -234,4 +234,4 @@ def your_images_main():
 
 if __name__ == '__main__':
     main()
-    your_images_main()
+    # your_images_main() # fixme remove comment

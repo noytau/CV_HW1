@@ -32,7 +32,7 @@ class Solution:
             Homography from source to destination, 3x3 numpy array.
         """
         # Create vectors of [x,y,1]
-        N_size = match_p_dst.shape[1]  # Get the N dimention of matching points. meaning-number of matching points.
+        N_size = match_p_dst.shape[1]  # Get the N dimension of matching points. meaning-number of matching points.
         ones_vector = np.ones((N_size, 1)).T
         match_p_src_vert = np.vstack((match_p_src, ones_vector))
         match_p_dst_vert = np.vstack((match_p_dst, ones_vector))
@@ -83,13 +83,13 @@ class Solution:
         dst_image = np.zeros(dst_image_shape,  dtype=int)
         for row in range(src_image.shape[0]):
             for col in range(src_image.shape[1]):
-                point = np.array([[row], [col], [1]], dtype=int)
+                point = np.array([[col], [row], [1]], dtype=int)
                 transformed_point = np.dot(homography, point)
                 normalized_point = (int(transformed_point[0][0] / transformed_point[2][0]), int(transformed_point[1][0] / transformed_point[2][0]))
                 # Check if point is in dest image
                 if (normalized_point[0] in range(dst_image_shape[1])) and (normalized_point[1] in range(dst_image_shape[0])):
                     for channel in range(dst_image_shape[2]):
-                        dst_image[normalized_point[0]][normalized_point[1]][channel] = src_image[row][col][channel]
+                        dst_image[normalized_point[1]][normalized_point[0]][channel] = src_image[row][col][channel]
 
         return dst_image
 
@@ -122,16 +122,14 @@ class Solution:
         """
         dst_image = np.zeros(dst_image_shape, dtype=int)
         # Setting meshgrid with indeices instead of meshgrid since meshgrid returns to arrays
-        meshgrid_image = np.indices((src_image.shape[0], src_image.shape[1]))
+        meshgrid_image = np.indices((src_image.shape[1], src_image.shape[0]))
         meshgrid_image = meshgrid_image.reshape(2, -1)
         meshgrid_image = np.vstack((meshgrid_image, np.ones(meshgrid_image.shape[1]))).astype(np.int)
 
         transformed_vectors = np.dot(homography, meshgrid_image)
         normalized_x = np.divide(np.array(transformed_vectors[0, :]), np.array(transformed_vectors[2, :])).astype(np.int)
         normalized_y = np.divide(np.array(transformed_vectors[1, :]), np.array(transformed_vectors[2, :])).astype(np.int)
-        selected_points = np.where((normalized_x >= 0) & (normalized_x < dst_image_shape[1]) & (normalized_y >= 0) & (
-                     normalized_y < dst_image_shape[0]))
-        print(selected_points)
+        selected_points = np.where((normalized_x >= 0) & (normalized_x < dst_image_shape[1]) & (normalized_y >= 0) & (normalized_y < dst_image_shape[0]))
         x_cords = normalized_x[selected_points] # taking x,y coordinates
         y_cords = normalized_y[selected_points]
 
@@ -139,67 +137,31 @@ class Solution:
         meshgrid_image_x = meshgrid_image[0][selected_points]
         meshgrid_image_y = meshgrid_image[1][selected_points]
 
-        dst_image[y_cords][x_cords] = src_image[meshgrid_image_y][meshgrid_image_x]
+        dst_image[y_cords, x_cords] = src_image[meshgrid_image_y, meshgrid_image_x]
         return dst_image
 
+    @staticmethod
+    def get_vectors_and_inliers (homography: np.ndarray,
+                        match_p_src: np.ndarray,
+                        match_p_dst: np.ndarray,
+                        max_err: float) -> (np.ndarray, np.ndarray, Tuple[float, float]):
 
-        # # getting images shapes and init a matrix to store all the pixel locations.
-        # dst_image_height = dst_image_shape[0];
-        # dst_image_width = dst_image_shape[1];
-        # dst_image_channles = dst_image_shape[2]
-        # src_image_height = src_image.shape[0];
-        # src_image_width = src_image.shape[1];
-        # src_image_channles = src_image.shape[2]
-        # dest_image = np.zeros((dst_image_height, dst_image_width, dst_image_channles), dtype=int)
-        # meshgrid_src_cor = np.indices(
-        #     (src_image_width, src_image_height))  # function meshgrid is not good enough as creates two arrays
-        # # meshgrid_src_cor =
-        # # [[[   0    0    0 ...    0    0    0]
-        # #                   ...
-        # #   [1367 1367 1367 ... 1367 1367 1367]]
-        #
-        # #  [[   0    1    2 ... 1023 1024 1025]
-        # #                   ...
-        # #   [   0    1    2 ... 1023 1024 1025]]]
-        #
-        # meshgrid_src_cor = meshgrid_src_cor.reshape(2, -1)  # all the pixels as 2X(hight*width) matrix
-        # # meshgrid_src_cor =
-        # # [[   0    0    0 ... 1367 1367 1367]
-        # # [   0    1    2 ... 1023 1024 1025]]
-        #
-        # old_x = meshgrid_src_cor[0, :]
-        # old_y = meshgrid_src_cor[1, :]
-        #
-        # meshgrid_src_cor = np.vstack((meshgrid_src_cor, np.ones(meshgrid_src_cor.shape[1]))).astype(
-        #     np.int)  # add 1 to make it homogeneous
-        # # meshgrid_src_cor =
-        # # [[   0    0    0 ... 1367 1367 1367]
-        # # [   0    1    2 ... 1023 1024 1025]
-        # # [   1    1    1 ...    1    1    1]]
-        #
-        # new_cor = np.dot(homography,
-        #                  meshgrid_src_cor)  # (3) Transform the source homogeneous coordinates to the target homogeneous coordinates with a simple matrix multiplication
-        #
-        # x_cor_norm = np.divide(np.array(new_cor[0, :]), np.array(new_cor[2, :])).astype(
-        #     np.int)  # (3) apply the normalization you've seen in class (4) Convert the coordinates into integer values
-        # y_cor_norm = np.divide(np.array(new_cor[1, :]), np.array(new_cor[2, :])).astype(
-        #     np.int)  # (3) apply the normalization you've seen in class (4) Convert the coordinates into integer values
-        #
-        # cliped_points = np.where((x_cor_norm >= 0) & (x_cor_norm < dst_image_width) & (y_cor_norm >= 0) & (
-        #             y_cor_norm < dst_image_height))  # (4) clip them according to the destination image size
-        # # print (cliped_points)
-        # x_cor_norm = x_cor_norm[cliped_points]  # (4) clip them according to the destination image size
-        # y_cor_norm = y_cor_norm[cliped_points]
-        # old_x = old_x[cliped_points]
-        # old_y = old_y[cliped_points]
-        #
-        # dest_image[y_cor_norm, x_cor_norm] = src_image[
-        #     old_y, old_x]  # (5) Plant the pixels from the source image to the target image according to the coordinates you found.
-        #
-        # return dest_image
+        N_size = match_p_dst.shape[1]
+        # concat ones to create vectors
+        src_vector = np.vstack((match_p_src, np.ones(N_size))).astype(np.int)
+        dst_vector = np.vstack((match_p_dst, np.ones(N_size))).astype(np.int)
+        # compute homography
+        src_vector_h = np.dot(homography, src_vector)
+        src_vector_norm = (1 / src_vector_h[2]) * src_vector_h
 
-    #return new_image
+        inliers = []
+        for i in range(N_size):
+            # compute error between calculated homography to given
+            homography_err = np.linalg.norm(src_vector_norm[:, i] - dst_vector[:, i])
+            if homography_err < max_err:
+                inliers.append(i)
 
+        return (src_vector_norm, dst_vector, inliers)
 
     @staticmethod
     def test_homography(homography: np.ndarray,
@@ -226,9 +188,18 @@ class Solution:
             inliers). In edge case where the number of inliers is zero,
             return dist_mse = 10 ** 9.
         """
-        # return fit_percent, dist_mse
-        """INSERT YOUR CODE HERE"""
-        pass
+
+        (src_vector_norm, dst_vector, inliers) = Solution.get_vectors_and_inliers(homography, match_p_src, match_p_dst,
+                                                                                  max_err)
+        if inliers:
+            # distance between points is calculated with L2 norm
+            dist_mse = np.linalg.norm(src_vector_norm[:, inliers] - dst_vector[:, inliers])
+        else:
+            dist_mse = 10 ** 9
+        # calculate the percentage of inliers from given points
+        fit_percent = len(inliers) / match_p_src.shape[1]
+
+        return fit_percent, dist_mse
 
     @staticmethod
     def meet_the_model_points(homography: np.ndarray,
@@ -255,9 +226,12 @@ class Solution:
             The second entry is the matching points form the destination
             image (shape 2xD; D as above).
         """
-        # return mp_src_meets_model, mp_dst_meets_model
-        """INSERT YOUR CODE HERE"""
-        pass
+        (_, _, inliers) = Solution.get_vectors_and_inliers(homography, match_p_src, match_p_dst,
+                                                                                  max_err)
+        mp_src_meets_model = match_p_src[:, inliers]
+        mp_dst_meets_model = match_p_dst[:, inliers]
+
+        return mp_src_meets_model, mp_dst_meets_model
 
     def compute_homography(self,
                            match_p_src: np.ndarray,
@@ -277,21 +251,60 @@ class Solution:
         Returns:
             homography: Projective transformation matrix from src to dst.
         """
-        # # use class notations:
-        # w = inliers_percent
-        # # t = max_err
-        # # p = parameter determining the probability of the algorithm to
-        # # succeed
-        # p = 0.99
-        # # the minimal probability of points which meets with the model
-        # d = 0.5
-        # # number of points sufficient to compute the model
-        # n = 4
-        # # number of RANSAC iterations (+1 to avoid the case where w=1)
-        # k = int(np.ceil(np.log(1 - p) / np.log(1 - w ** n))) + 1
-        # return homography
-        """INSERT YOUR CODE HERE"""
-        pass
+
+        # use class notations:
+        w = inliers_percent
+        # t = max_err
+        # p = parameter determining the probability of the algorithm to
+        # succeed
+        p = 0.99
+        # the minimal probability of points which meets with the model
+        d = 0.5
+        # number of points sufficient to compute the model
+        n = 4
+        # number of RANSAC iterations (+1 to avoid the case where w=1)
+        k = int(np.ceil(np.log(1 - p) / np.log(1 - w ** n))) + 1
+
+        N_size = match_p_src.shape[1]
+        # init mse value
+        mse_value = 10 ** 9 + 1
+        k = k * 10 # increase k to avoid unknown homographies
+        # loop for k iterations
+        for i in range(k):
+            # randomly select n points
+            random_selected_points = sample(range(N_size), n)  # random n indexes
+            computed_homography = Solution.compute_homography_naive(match_p_src[:, random_selected_points],
+                                                    match_p_dst[:, random_selected_points])
+            mp_src_meets_model, mp_dst_meets_model = Solution.meet_the_model_points(computed_homography, match_p_src,
+                                                                                    match_p_dst, max_err)
+            fit_percent, dist_mse = Solution.test_homography(computed_homography, match_p_src, match_p_dst, max_err)
+
+            if (fit_percent >= w):
+                computed_homography = Solution.compute_homography_naive(mp_src_meets_model, mp_dst_meets_model)
+                fit_percent, dist_mse = Solution.test_homography(computed_homography, match_p_src, match_p_dst, max_err)
+                if (dist_mse < mse_value):
+                    homography = computed_homography
+                    mse_value = dist_mse
+        return homography
+
+    # points_size = match_p_src.shape[1]
+    # best_mse = 10 ** 9 + 1  # initial val for first iteration
+    # k = k * 10
+    # for i in range(k):
+    #
+    #     random_indexes = sample(range(points_size), n)  # random n indexes
+    #     Hom = Solution.compute_homography_naive(match_p_src[:, random_indexes],
+    #                                             match_p_dst[:, random_indexes])  # calc Homography
+    #     mp_src_meets_model, mp_dst_meets_model = Solution.meet_the_model_points(Hom, match_p_src, match_p_dst, max_err)
+    #     fit_percent, dist_mse = Solution.test_homography(Hom, match_p_src, match_p_dst, max_err)
+    #
+    #     if (fit_percent >= w):
+    #         Hom = Solution.compute_homography_naive(mp_src_meets_model, mp_dst_meets_model)
+    #         fit_percent, dist_mse = Solution.test_homography(Hom, match_p_src, match_p_dst, max_err)
+    #         if (dist_mse < best_mse):
+    #             homography = Hom
+    #             best_mse = dist_mse
+
 
     @staticmethod
     def compute_backward_mapping(
