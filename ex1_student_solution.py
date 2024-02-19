@@ -287,25 +287,6 @@ class Solution:
                     mse_value = dist_mse
         return homography
 
-    # points_size = match_p_src.shape[1]
-    # best_mse = 10 ** 9 + 1  # initial val for first iteration
-    # k = k * 10
-    # for i in range(k):
-    #
-    #     random_indexes = sample(range(points_size), n)  # random n indexes
-    #     Hom = Solution.compute_homography_naive(match_p_src[:, random_indexes],
-    #                                             match_p_dst[:, random_indexes])  # calc Homography
-    #     mp_src_meets_model, mp_dst_meets_model = Solution.meet_the_model_points(Hom, match_p_src, match_p_dst, max_err)
-    #     fit_percent, dist_mse = Solution.test_homography(Hom, match_p_src, match_p_dst, max_err)
-    #
-    #     if (fit_percent >= w):
-    #         Hom = Solution.compute_homography_naive(mp_src_meets_model, mp_dst_meets_model)
-    #         fit_percent, dist_mse = Solution.test_homography(Hom, match_p_src, match_p_dst, max_err)
-    #         if (dist_mse < best_mse):
-    #             homography = Hom
-    #             best_mse = dist_mse
-
-
     @staticmethod
     def compute_backward_mapping(
             backward_projective_homography: np.ndarray,
@@ -332,9 +313,24 @@ class Solution:
             The source image backward warped to the destination coordinates.
         """
 
-        # return backward_warp
-        """INSERT YOUR CODE HERE"""
-        pass
+        # Create a mesh-grid of columns and rows of the destination image
+        meshgrid_dst_matrix = np.indices((dst_image_shape[0], dst_image_shape[1])).reshape(2, -1)
+        meshgrid_dst_matrix = np.vstack((meshgrid_dst_matrix, np.ones((meshgrid_dst_matrix.shape[1])))).astype(np.int)
+        meshgrid_dst_matrix[[0,1]] = meshgrid_dst_matrix[[1,0]]
+        # Create a set of homogenous coordinates for the destination image
+        meshgrid_homography = np.dot(backward_projective_homography, meshgrid_dst_matrix)
+        # Normalize vectors
+        y_dst_cords = np.divide(np.array(meshgrid_homography[1, :]), np.array(meshgrid_homography[2,:])).astype(np.int)
+        x_dst_cords = np.divide(np.array(meshgrid_homography[0, :]), np.array(meshgrid_homography[2,:])).astype(np.int)
+
+        # Create the mesh-grid of source image coordinates
+        meshgrid_src_matrix = np.indices((src_image.shape[0], src_image.shape[1])).reshape(2, -1)
+        x_src_cords = meshgrid_src_matrix[1]
+        y_src_cords = meshgrid_src_matrix[0]
+
+        # Interpolate grid data values
+        backward_warp = (griddata((x_src_cords, y_src_cords), src_image[y_src_cords, x_src_cords, :], (x_dst_cords, y_dst_cords), method='cubic')).reshape(dst_image_shape)
+        return backward_warp
 
     @staticmethod
     def find_panorama_shape(src_image: np.ndarray,
@@ -424,9 +420,19 @@ class Solution:
             A new homography which includes the backward homography and the
             translation.
         """
-        # return final_homography
-        """INSERT YOUR CODE HERE"""
-        pass
+        # Build the translation matrix from the pads
+        trans_matrix = [[1, 0, - pad_left],
+                        [0, 1, - pad_up],
+                        [0, 0, 1]]
+
+        # Compose the backward homography and the translation matrix
+        trans_homography = np.dot(backward_homography, trans_matrix)
+
+        # Scale the homography
+        final_homography = trans_homography / (np.linalg.norm(trans_homography))
+
+        return final_homography
+
 
     def panorama(self,
                  src_image: np.ndarray,
@@ -467,6 +473,19 @@ class Solution:
             A panorama image.
 
         """
-        # return np.clip(img_panorama, 0, 255).astype(np.uint8)
-        """INSERT YOUR CODE HERE"""
-        pass
+        # Compute the forward homography and shape
+        homography = Solution.compute_homography(self, match_p_src, match_p_dst, inliers_percent, max_err)
+        panorama_y_cords, panorama_x_cords, pad_stuct = Solution.find_panorama_shape(src_image, dst_image, homography)
+        # Compute backward homography
+        backward_homography = Solution.compute_homography(self, match_p_dst, match_p_src, inliers_percent,
+                                                          max_err)  # compute backward homography
+        translated_homography = Solution.add_translation_to_backward_homography(backward_homography, pad_stuct.pad_left, pad_stuct.pad_up)
+        backward_map = Solution.compute_backward_mapping(translated_homography, src_image,
+                                                         (panorama_y_cords, panorama_x_cords, 3))
+        # Create the an empty panorama image and plant the dest image
+        img_panorama = np.zeros((panorama_y_cords, panorama_x_cords, 3))
+        img_panorama[: backward_map.shape[0], : backward_map.shape[1]] = backward_map
+        # place the backward warped image in the indices where the panorama image is zero
+        img_panorama[pad_stuct.pad_up: pad_stuct.pad_up + dst_image.shape[0], pad_stuct.pad_left: pad_stuct.pad_left + dst_image.shape[1]] = dst_image
+
+        return np.clip(img_panorama, 0, 255).astype(np.uint8)
